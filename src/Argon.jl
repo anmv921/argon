@@ -1,6 +1,5 @@
 module Argon
 
-# Write your package code here.
-print("test")
+print("test2")
 
 end

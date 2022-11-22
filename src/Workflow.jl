@@ -57,10 +57,10 @@ module Workflow
         # 2 results
         
         if (switch == 0) # initialization
-            global nhis = 200 # for the radial distribution function
+            global nhis = 200 # total number of bins
             global ngr = 0
             global delg = box / (2 * nhis) # bin size
-            global g = zeros(Float64, nhis, 1) # nhis total number of bins    
+            global g = zeros(Float64, nhis, 1)     
         
         elseif (switch == 1) # sample
             global ngr += 1
@@ -68,7 +68,7 @@ module Workflow
                 for j=i+1:npart # loop over all pairs
                     xr = x[i, :] - x[j, :]
                     xr = xr - box * [round(XR/box) for XR in xr] # periodic bounds
-                    r = sqrt(sum(xr.*xr)) # alternatively sqrt(dot(xr, xr)), using LinearAlgebra
+                    r = sqrt(sum(xr.*xr))
                     
                     #raioCorte = box / 2
                     raioCorte = 3.2
@@ -119,54 +119,68 @@ module Workflow
         return xPos, yPos
     end
 
-    function init(in_Testing, spacing0, in_Npart, in_SampleStep, in_FolderName, tmax)
+    function init(in_Testing, spacing0, in_Npart,
+         in_SampleStep, in_FolderName, tmax, params)
         # Initialization of md program
         global t = 0.0;
+
         global testing = in_Testing
+
         #rightnow = Dates.Time(Dates.now())
         #datetoday = Dates.today()
         #folderName = string(datetoday) * "-" * replace(string(rightnow), ":" => ".")
+
         folderName = in_FolderName
         mkdir(folderName)
+
         enFilePath = joinpath(folderName, "e.dat")
         global io = open(enFilePath, "w");
         ovFilePath = joinpath(folderName, "ovito.xyz")
         global ovito = open(ovFilePath, "w")
         global diffFile = open(joinpath(folderName, "diff.dat"), "w")
-        global dt = 0.0001
+
+        global dt = parse(Float64, params["dt"])
+
         global grfile = open(joinpath(folderName, "gr.dat"), "w")
+
         global npart = in_Npart
-        global rad = 0.5
-        # initial conditions parameters
-        global dx = 2*rad + spacing0 # distance between the particle centers; determines the density
+
+        global rad = parse(Float64, params["mol_radius"])
+
+        # Initial conditions parameters
+
+        # Distance between the particle centers; determines the density
+        global dx = 2*rad + spacing0
         global dy = dx
-        global width = sqrt(npart) # number of particles (laterally)
+        global width = sqrt(npart) # Number of particles (laterally)
         global height = width
-        #global poffset = rad
         global poffset = rad + spacing0/2
         
-        ###############################################################################################
-        global box = sqrt(npart) * 2 * rad + spacing0 * (sqrt(npart) - 1) + spacing0
+        ########################################################################
+        global box = sqrt(npart) * 2 * rad + spacing0 * (sqrt(npart) - 1) +
+         spacing0
         # Simulation cell size!
-        ###############################################################################################
+        ########################################################################
         
         global rho = npart / (box * box)
-        global temp = 1.0; # temperatura
+        global temp = parse(Float64, params["temperatura"])
         
-        global rc = 3.0
+        global rc = parse(Float64, params["cutoff_radius"])
         global rc2 = rc*rc
         global ecut = 4.0 * ( 1.0 / (rc^12) - 1.0 / (rc^6) )
 
-        global x = zeros(Float64, npart, 2)
-        global v = zeros(Float64, npart, 2)
-        global xm = zeros(Float64, npart, 2)
-        global f = zeros(Float64, npart, 2)
-        global press = zeros(Float64, npart, 1)
+        global Ndim = parse(Int64, params["Ndim"])
 
-        global sumv = zeros(Float64, 2)
+        global x = zeros(Float64, npart, Ndim)
+        global v = zeros(Float64, npart, Ndim)
+        global xm = zeros(Float64, npart, Ndim)
+        global f = zeros(Float64, npart, Ndim)
+        global press = zeros(Float64, npart, 1) # Pressure
+
+        global sumv = zeros(Float64, Ndim)
         global sumv2 = 0
 
-        global Ndim = 2
+        
         
         global en = 0.0
 
@@ -190,11 +204,10 @@ module Workflow
 
             global x[i, 1], x[i, 2] = lattice_pos(i) # place the particles on a lattice
             # section 3.2.2
-            # liar... there is nothing in section 3.2.2. NOTHING!
+            # lies... there is nothing in section 3.2.2. NOTHING!
             global v[i, 1], v[i, 2] = ( rand() - 0.5 ), ( rand() - 0.5 )
             global sumv[1], sumv[2] = sumv[1] + v[i, 1], sumv[2] + v[i, 2]
             global sumv2 = sumv2 + ( v[i, 1]*v[i, 1] + v[i, 2]*v[i, 2] )
-
         end
 
         global sumv[1], sumv[2] = sumv[1] / npart, sumv[2] / npart # velocity center of mass
@@ -316,14 +329,17 @@ module Workflow
         global virial = (virial / (npart * Ndim * box * box)) + rho * temp
     end
 
-    function md(in_Testing, spacing0, tmax, in_Npart, in_SampleStep, in_FolderName)
+    function md(in_Testing, spacing0, tmax, in_Npart,
+         in_SampleStep, in_FolderName, params)
         # simple md program
         println("Starting the initialization...")
-        init(in_Testing, spacing0, in_Npart, in_SampleStep, in_FolderName, tmax) # initialization
+        init(in_Testing, spacing0, in_Npart,
+         in_SampleStep, in_FolderName, tmax, params)
         println("Initialization finished. Starting main loop...")
         
-        println(rho)
-        println(1 / (spacing0 + 2*rad)^2)
+        println("densidade="*string(rho))
+        # todo throw an error if these values are different
+        #println(1 / (spacing0 + 2*rad)^2)
         
         while t < tmax # md loop
             force(f, en) # determine the forces # appendix F for tricks 
